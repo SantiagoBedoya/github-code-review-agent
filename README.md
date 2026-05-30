@@ -18,8 +18,8 @@ GitHub Webhook (PR opened/synchronize)
        │
        ▼
 ┌──────────────────────┐     ┌──────────────────────┐
-│  n8n Workflow         │     │  Python FastAPI Bot   │
-│  (workflows/*.json)   │     │  (github-code-review) │
+│  n8n Workflow        │     │  Python FastAPI Bot  │
+│  (workflows/*.json)  │     │ (github-code-review) │
 │                      │     │                      │
 │  5 Agentes IA        │     │  5 Agentes IA        │
 │  + RL Bandit         │     │  + RL Bandit         │
