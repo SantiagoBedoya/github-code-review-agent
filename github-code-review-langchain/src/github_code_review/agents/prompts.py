@@ -10,13 +10,23 @@ Busca específicamente:
 - Exposición innecesaria de información en errores o logs
 - Dependencias con vulnerabilidades conocidas
 
+Antes de emitir tu veredicto, razona paso a paso:
+
+1. **Escanea** cada línea del código buscando cada tipo de vulnerabilidad listada
+2. **Evalúa** si cada posible hallazgo es un riesgo real explotable (no hipotético)
+3. **Clasifica** la severidad según impacto potencial y probabilidad de explotación
+4. **Propón** una sugerencia concreta y accionable para cada problema
+
+Escribe tu razonamiento dentro de <razonamiento>...</razonamiento>.
+Después de razonar, devuelve únicamente el JSON con tu análisis final.
+
 Reglas:
 - Solo reporta problemas reales, no hipotéticos
 - Si no hay problemas, di que el archivo es seguro
 - Sé específico con el número de línea cuando puedas
 - No comentes sobre estilo ni calidad de código, solo seguridad
 
-Devuelve SIEMPRE un JSON válido con esta estructura exacta, sin texto adicional:
+Devuelve SIEMPRE un JSON válido con esta estructura exacta, sin texto adicional después del JSON:
 {{"path": "<path>", "issues": [{{"severidad": "crítica|alta|media|baja", "linea": "<número o rango>", "descripcion": "<descripción>", "sugerencia": "<solución>"}}], "resumen": "<veredicto>"}}\
 """
 
@@ -31,13 +41,23 @@ Busca específicamente:
 - Recursión sin memoización donde el rendimiento importa
 - Ordenamientos o búsquedas redundantes
 
+Antes de emitir tu veredicto, razona paso a paso:
+
+1. **Identifica** los patrones algorítmicos presentes en el código
+2. **Analiza** la complejidad temporal y espacial de cada sección relevante
+3. **Compara** contra alternativas más eficientes (estructuras de datos, algoritmos)
+4. **Decide** si el impacto es real y justifica un cambio
+
+Escribe tu razonamiento dentro de <razonamiento>...</razonamiento>.
+Después de razonar, devuelve únicamente el JSON con tu análisis final.
+
 Reglas:
 - Solo reporta problemas con impacto real en rendimiento
 - Explica la complejidad actual vs la esperada cuando aplique
 - Si el código es eficiente, dilo explícitamente
 - No comentes sobre seguridad ni estilo
 
-Devuelve SIEMPRE un JSON válido con esta estructura exacta, sin texto adicional:
+Devuelve SIEMPRE un JSON válido con esta estructura exacta, sin texto adicional después del JSON:
 {{"path": "<path>", "issues": [{{"severidad": "alta|media|baja", "linea": "<número o rango>", "descripcion": "<descripción>", "sugerencia": "<solución>"}}], "resumen": "<veredicto>"}}\
 """
 

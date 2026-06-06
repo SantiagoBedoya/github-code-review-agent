@@ -1,0 +1,436 @@
+{
+  "name": "github-code-review-agents",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "github-review",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "9cc30183-257e-4f73-8b75-d5d00e6638c2",
+      "name": "Webhook",
+      "webhookId": "fad6a2ad-6063-4a2c-a37a-9bcf2ee8b397"
+    },
+    {
+      "parameters": {
+        "jsCode": "const EXTENSIONES_VALIDAS = [\n  '.py', '.js', '.ts', '.jsx', '.tsx',\n  '.java', '.go', '.rb', '.php', '.cs',\n  '.cpp', '.c', '.rs', '.swift', '.kt',\n  '.md'\n];\n\nconst ARCHIVOS_EXCLUIDOS = [\n  'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',\n  'poetry.lock', 'Gemfile.lock', '.env.example'\n];\n\nconst archivos = $input.all();\n\nconst filtrados = archivos.filter(item => {\n  const filename = item.json.filename;\n  const ext = '.' + filename.split('.').pop();\n  \n  // Excluir archivos no relevantes\n  if (ARCHIVOS_EXCLUIDOS.some(e => filename.endsWith(e))) return false;\n  \n  // Solo extensiones de código\n  if (!EXTENSIONES_VALIDAS.includes(ext)) return false;\n  \n  // Excluir archivos eliminados (no hay nada que revisar)\n  if (item.json.status === 'removed') return false;\n  \n  // Excluir patches muy grandes (>300 líneas cambiadas)\n  if ((item.json.additions + item.json.deletions) > 300) return false;\n  \n  return true;\n});\n\nreturn filtrados;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "7561c819-8062-4398-b262-fc3d32b8b343",
+      "name": "filter_files"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $json.repo_owner }}/{{ $json.repo_name }}/pulls/{{ $json.pr_number }}/files",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "X-GitHub-Api-Version",
+              "value": "2022-11-28"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        0
+      ],
+      "id": "98d3bd51-7717-464e-9ff7-117f5075d588",
+      "name": "get_pr_files",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "nP0iuyH20N2e29Wh",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $('set_vars').item.json.repo_owner }}/{{ $('set_vars').item.json.repo_name }}/contents/{{ $json.filename }}?ref={{ $('set_vars').item.json.pr_head_sha }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "605a63ed-32e6-4333-b41d-0bc0e737b31a",
+      "name": "get_pr_file_content",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "nP0iuyH20N2e29Wh",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Necesitas cruzar el patch del paso anterior con el archivo actual\nconst archivosConPatch = $('filter_files').all(); // ajusta el nombre al de tu nodo\n\nreturn $input.all().map(item => {\n  const contenido = Buffer.from(item.json.content, 'base64').toString('utf-8');\n  \n  // Buscar el patch correspondiente por path\n  const archivoOriginal = archivosConPatch.find(\n    a => a.json.filename === item.json.path\n  );\n\n  return {\n    json: {\n      filename: item.json.name,\n      path: item.json.path,\n      contenido: contenido,\n      patch: archivoOriginal?.json.patch ?? 'No disponible'\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "1c008224-0ff4-4f91-b90c-322b330bb84e",
+      "name": "decode_pr_file_content"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b15e6b95-b5e4-484d-8309-d2b515ad01e3",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "opened",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "3247e83b-50e8-477f-b381-53de31d6a99d",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "synchronize",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        0
+      ],
+      "id": "f9acaabe-77ea-4333-bbb9-2c4faaa19f82",
+      "name": "if_pr_opened_or_synchronize"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify($json.resultados) }}",
+        "options": {
+          "systemMessage": "Eres un experto en revisión de código. Recibes los análisis de 5 agentes especializados (seguridad, estructuras de datos, calidad, performance y documentación) sobre los archivos modificados en un Pull Request.\n\nTu tarea es generar un reporte final consolidado en formato Markdown optimizado para mostrarse como comentario en un Pull Request de GitHub.\n\nReglas:\n- Agrupa los issues por severidad: críticos primero, luego altos, medios y bajos\n- Elimina duplicados si varios agentes reportaron el mismo problema\n- Sé conciso pero específico, incluye el archivo y línea en cada issue\n- Usa emojis para que sea fácil de escanear visualmente\n- Para cada issue, indica entre corchetes el área que lo detectó: [Seguridad], [Estructuras de Datos], [Calidad], [Rendimiento], [Documentación]\n- Si no hay issues relevantes, felicita al autor con un mensaje positivo\n- Termina siempre con un resumen ejecutivo de máximo 3 líneas\n\nFormato esperado del comentario:\n## 🤖 Revisión automática de código\n\n### 🔴 Crítico\n### 🟠 Alto  \n### 🟡 Medio\n### 🟢 Bajo\n\n---\n### 📋 Resumen ejecutivo"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1792,
+        0
+      ],
+      "id": "b81363fb-3c64-4c8a-973a-0e4badd59159",
+      "name": "AI Agent - synthesizer"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1856,
+        224
+      ],
+      "id": "4388a4b2-dddd-4ca1-81f9-88136cf59874",
+      "name": "OpenAI Chat Model5",
+      "credentials": {
+        "openAiApi": {
+          "id": "JFrLJIq9TYtJaGd5",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/{{ $('set_vars').first().json.repo_owner }}/{{ $('set_vars').first().json.repo_name }}/issues/{{ $('set_vars').first().json.pr_number }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "X-GitHub-Api-Version",
+              "value": "2022-11-28"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "body",
+              "value": "={{ $json.output }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2144,
+        0
+      ],
+      "id": "137b5a1c-0c78-4e6a-acf5-3f50798506a2",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "nP0iuyH20N2e29Wh",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const SD = $getWorkflowStaticData('node');\nconst API_KEY = \"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\";\n\nif (!API_KEY) throw new Error('OPENAI_API_KEY no definida');\n\nif (!SD.weights) {\n  SD.weights = {\n    seguridad:      { w: [0,0,0,0,0,0,0,0,0], alpha: 0.2, beta: 0.1 },\n    estructuras:    { w: [0,0,0,0,0,0,0,0,0], alpha: 0.2, beta: 0.1 },\n    calidad:        { w: [0,0,0,0,0,0,0,0,0], alpha: 0.2, beta: 0.1 },\n    performance:    { w: [0,0,0,0,0,0,0,0,0], alpha: 0.2, beta: 0.1 },\n    documentacion:  { w: [0,0,0,0,0,0,0,0,0], alpha: 0.2, beta: 0.1 },\n  };\n  SD.epsilon = 0.3;\n  SD.count = 0;\n  SD.history = [];\n}\n\nconst SYS_PROMPTS = {\n  seguridad: `Eres un experto en ciberseguridad especializado en revisión de código seguro. Tu única tarea es analizar el código que te proporcionen e identificar problemas de seguridad.\n\nBusca específicamente:\n- Vulnerabilidades OWASP Top 10 (inyección SQL, XSS, CSRF, etc.)\n- Credenciales, tokens o secretos hardcodeados\n- Autenticación o autorización débil o ausente\n- Manejo inseguro de datos sensibles o contraseñas\n- Exposición innecesaria de información en errores o logs\n- Dependencias con vulnerabilidades conocidas\n\nReglas:\n- Solo reporta problemas reales, no hipotéticos\n- Si no hay problemas, di que el archivo es seguro\n- Sé específico con el número de línea cuando puedas\n- No comentes sobre estilo ni calidad de código, solo seguridad\n\nResponde SIEMPRE en este formato JSON exacto, sin texto adicional antes ni después:\n{\"path\": \"path_archivo\", \"issues\":[{\"severidad\":\"crítica|alta|media|baja\",\"linea\":\"número o rango\",\"descripcion\":\"descripción del problema\",\"sugerencia\":\"cómo arreglarlo\"}],\"resumen\":\"una línea con el veredicto general\"}`,\n  estructuras: `Eres un experto en algoritmos y estructuras de datos. Tu única tarea es analizar el código que te proporcionen e identificar uso ineficiente de estructuras de datos y algoritmos.\n\nBusca específicamente:\n- Complejidad algorítmica innecesariamente alta (O(n²) evitable, búsquedas lineales donde se puede usar un set/dict, etc.)\n- Estructura de datos incorrecta para el caso de uso (lista donde debería ser set, dict donde debería ser lista, etc.)\n- Loops anidados que podrían simplificarse\n- Recursión sin memoización donde el rendimiento importa\n- Ordenamientos o búsquedas redundantes\n\nReglas:\n- Solo reporta problemas con impacto real en rendimiento\n- Explica la complejidad actual vs la esperada cuando aplique\n- Si el código es eficiente, dilo explícitamente\n- No comentes sobre seguridad ni estilo, solo estructuras y algoritmos\n\nResponde SIEMPRE en este formato JSON exacto, sin texto adicional antes ni después:\n{\"path\": \"path_archivo\", \"issues\":[{\"severidad\":\"alta|media|baja\",\"linea\":\"número o rango\",\"descripcion\":\"descripción del problema\",\"sugerencia\":\"cómo arreglarlo\"}],\"resumen\":\"una línea con el veredicto general\"}`,\n  calidad: `Eres un experto en calidad y arquitectura de software. Tu única tarea es analizar el código que te proporcionen e identificar problemas de calidad, mantenibilidad y buenas prácticas.\n\nBusca específicamente:\n- Violaciones de principios SOLID\n- Funciones o clases con múltiples responsabilidades\n- Código duplicado o lógica copy-paste\n- Nombres de variables, funciones o clases poco descriptivos o confusos\n- Funciones demasiado largas (más de 30-40 líneas)\n- Código muerto, comentado o inalcanzable\n- Magic numbers o strings sin constante nombrada\n- Manejo de errores ausente o genérico\n\nReglas:\n- Prioriza problemas que afecten mantenibilidad real\n- Si el código es limpio, dilo explícitamente\n- No comentes sobre seguridad ni performance, solo calidad\n- Sé constructivo y específico en las sugerencias\n\nResponde SIEMPRE en este formato JSON exacto, sin texto adicional antes ni después:\n{\"path\": \"path_archivo\", \"issues\":[{\"severidad\":\"alta|media|baja\",\"linea\":\"número o rango\",\"descripcion\":\"descripción del problema\",\"sugerencia\":\"cómo arreglarlo\"}],\"resumen\":\"una línea con el veredicto general\"}`,\n  performance: `Eres un experto en optimización y performance de aplicaciones. Tu única tarea es analizar el código que te proporcionen e identificar cuellos de botella y problemas de rendimiento.\n\nBusca específicamente:\n- Queries N+1 o llamadas a base de datos dentro de loops\n- Operaciones síncronas bloqueantes que deberían ser asíncronas\n- Falta de paginación en consultas que pueden devolver muchos registros\n- Ausencia de caché donde claramente sería beneficioso\n- Carga innecesaria de datos completos cuando solo se necesitan campos específicos\n- Memory leaks potenciales o acumulación innecesaria de objetos en memoria\n- Operaciones costosas ejecutadas repetidamente sin necesidad\n\nReglas:\n- Solo reporta problemas con impacto medible en rendimiento\n- Estima el impacto cuando sea posible (ej: \"esto genera N queries por cada item\")\n- Si el código es eficiente, dilo explícitamente\n- No comentes sobre seguridad ni calidad de código, solo performance\n\nResponde SIEMPRE en este formato JSON exacto, sin texto adicional antes ni después:\n{\"path\": \"path_archivo\", \"issues\":[{\"severidad\":\"alta|media|baja\",\"linea\":\"número o rango\",\"descripcion\":\"descripción del problema\",\"sugerencia\":\"cómo arreglarlo\"}],\"resumen\":\"una línea con el veredicto general\"}`,\n  documentacion: `Eres un experto en documentación y comunicación técnica. Tu única tarea es analizar el código que te proporcionen e identificar problemas de documentación y claridad.\n\nBusca específicamente:\n- Funciones o métodos públicos sin docstring o JSDoc\n- Clases sin descripción de su responsabilidad\n- Lógica compleja o no obvia sin comentarios explicativos\n- Parámetros y valores de retorno sin tipar ni documentar\n- TODOs o FIXMEs sin ticket o contexto asociado\n- Ausencia de ejemplos de uso en funciones críticas o públicas\n- Comentarios obsoletos que ya no corresponden al código\n\nReglas:\n- Enfócate en documentación que realmente ayude a otros desarrolladores\n- No pidas documentar código obvio o autoexplicativo\n- Si la documentación es adecuada, dilo explícitamente\n- No comentes sobre seguridad, performance ni calidad, solo documentación\n\nResponde SIEMPRE en este formato JSON exacto, sin texto adicional antes ni después:\n{\"path\": \"path_archivo\", \"issues\":[{\"severidad\":\"media|baja\",\"linea\":\"número o rango\",\"descripcion\":\"descripción del problema\",\"sugerencia\":\"cómo arreglarlo\"}],\"resumen\":\"una línea con el veredicto general\"}`\n};\n\nconst agents = ['seguridad', 'estructuras', 'calidad', 'performance', 'documentacion'];\nconst allResults = [];\nconst items = $input.all();\n\nfor (const item of items) {\n  const data = item.json;\n  SD.count++;\n\n  const path = data.path || '';\n  const patch = data.patch || '';\n  const linesChanged = (patch.match(/^[+-]/gm) || []).length;\n  const ext = path.split('.').pop().toLowerCase();\n  const exts = { py:0, js:0, ts:0, java:0, go:0, rb:0, php:0, cs:0 };\n  if (ext in exts) exts[ext] = 1;\n  const features = [exts.py, exts.js, exts.ts, exts.java, exts.go, exts.rb, exts.php, exts.cs, Math.min(linesChanged/300, 1)];\n\n  const analisis = {};\n  const decisions = {};\n\n  for (const agent of agents) {\n    const { w, alpha, beta } = SD.weights[agent];\n    const score = w.reduce((s, wi, i) => s + wi * features[i], 0);\n    const explore = Math.random() < SD.epsilon;\n    const run = explore ? Math.random() < 0.5 : score > 0;\n\n    decisions[agent] = { ran: run, score, features: features.slice(), explore };\n\n    if (run) {\n      try {\n        const response = await this.helpers.httpRequest({\n          method: 'POST',\n          url: 'https://api.openai.com/v1/chat/completions',\n          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },\n          body: {\n            model: 'gpt-4o-mini',\n            messages: [\n              { role: 'system', content: SYS_PROMPTS[agent] },\n              { role: 'user', content: `Archivo:\\n${path}\\n\\nContenido\\n${data.contenido || ''}\\n\\nDiff del PR:\\n${patch}` }\n            ],\n            temperature: 0\n          },\n          json: true\n        });\n        const output = response.choices?.[0]?.message?.content || '{}';\n        const clean = output.replace(/```json|```/g, '').trim();\n        const result = JSON.parse(clean);\n        analisis[agent] = result;\n\n        const found = (result.issues || []).length > 0;\n        const reward = found ? 1.0 : -0.5;\n        const lr = found ? alpha : beta;\n        features.forEach((f, i) => { w[i] += lr * (reward - score) * f; });\n      } catch (e) {\n        analisis[agent] = { path, issues: [], resumen: `Error: ${e.message}` };\n      }\n    } else {\n      analisis[agent] = { path, issues: [], resumen: `__SKIPPED__ (score: ${score.toFixed(2)}, explore: ${explore})` };\n    }\n  }\n\n  if (SD.count % 10 === 0 && SD.epsilon > 0.05) {\n    SD.epsilon = Math.max(0.05, SD.epsilon * 0.95);\n  }\n\n  SD.history.push(decisions);\n  SD.resultados = SD.resultados || [];\n  SD.resultados.push({ path, analisis });\n  allResults.push({ path, analisis });\n}\n\nreturn [{ json: { resultados: allResults } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "2a90d22e-e018-4c39-b8ee-39a3e774ca71",
+      "name": "bandit_agent_runner"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4d642df1-404f-48ef-9a20-43d2b837cee6",
+              "name": "repo_owner",
+              "value": "={{ $json.body.repository.owner.login }}",
+              "type": "string"
+            },
+            {
+              "id": "867ca2d6-99fb-469f-95f9-8da148727a48",
+              "name": "repo_name",
+              "value": "={{ $json.body.repository.name }}",
+              "type": "string"
+            },
+            {
+              "id": "b439f482-7a52-40af-be48-c54ccbb66b61",
+              "name": "pr_number",
+              "value": "={{ $json.body.number }}",
+              "type": "number"
+            },
+            {
+              "id": "e502322a-f207-4d88-ac08-20e01e142f2f",
+              "name": "pr_head_sha",
+              "value": "={{ $json.body.pull_request.head.sha }}",
+              "type": "string"
+            },
+            {
+              "id": "f2b0b033-8405-42e2-835c-374372252860",
+              "name": "base_branch",
+              "value": "={{ $json.body.pull_request.base.ref }}",
+              "type": "string"
+            },
+            {
+              "id": "07d8c7f5-2e11-4495-a177-43b03df1d2c5",
+              "name": "head_branch",
+              "value": "={{ $json.body.pull_request.head.ref }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        0
+      ],
+      "id": "ea3ecc0a-c7d4-4012-8249-e09c2d03b596",
+      "name": "set_vars"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "if_pr_opened_or_synchronize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "filter_files": {
+      "main": [
+        [
+          {
+            "node": "get_pr_file_content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_pr_files": {
+      "main": [
+        [
+          {
+            "node": "filter_files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_pr_file_content": {
+      "main": [
+        [
+          {
+            "node": "decode_pr_file_content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "if_pr_opened_or_synchronize": {
+      "main": [
+        [
+          {
+            "node": "set_vars",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "decode_pr_file_content": {
+      "main": [
+        [
+          {
+            "node": "bandit_agent_runner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "bandit_agent_runner": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - synthesizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - synthesizer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - synthesizer": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_vars": {
+      "main": [
+        [
+          {
+            "node": "get_pr_files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7d080493-f67f-481e-8367-726d09857884",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "98cbd41bb146341bdefc26e6b87b26b130f7fe9015e3437194e76d27d0693705"
+  },
+  "id": "A9Epfdt-l7D8kEQ3_KFoh",
+  "tags": []
+}

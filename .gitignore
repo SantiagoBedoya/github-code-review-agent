@@ -20,6 +20,3 @@ docker-data/
 .idea/
 .vscode/
 *.sublime-*
-
-# Ignored by secrets
-workflows

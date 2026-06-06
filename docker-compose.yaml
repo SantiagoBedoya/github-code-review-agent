@@ -1,8 +1,23 @@
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: n8n_postgres_local
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${LOCAL_DB_USER:-n8n}
+      - POSTGRES_PASSWORD=${LOCAL_DB_PASSWORD:-n8n_password}
+      - POSTGRES_DB=${LOCAL_DB_NAME:-n8n}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   n8n:
-    image: docker.n8n.io/n8nio/n8n:2.20.0
+    image: docker.n8n.io/n8nio/n8n:2.6.4
     container_name: n8n_local
     restart: unless-stopped
+    depends_on:
+      - postgres
     ports:
       - "5678:5678"
     environment:
@@ -15,18 +30,20 @@ services:
       - NODE_OPTIONS=--max-http-header-size=16384
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - N8N_CODE_ENV_ALLOW_LIST=OPENAI_API_KEY
-      # PostgreSQL (Neon)
-      - DB_TYPE=${DB_TYPE}
-      - DB_POSTGRESDB_HOST=${DB_POSTGRESDB_HOST}
-      - DB_POSTGRESDB_PORT=${DB_POSTGRESDB_PORT}
-      - DB_POSTGRESDB_DATABASE=${DB_POSTGRESDB_DATABASE}
-      - DB_POSTGRESDB_USER=${DB_POSTGRESDB_USER}
-      - DB_POSTGRESDB_PASSWORD=${DB_POSTGRESDB_PASSWORD}
-      - DB_POSTGRESDB_SSL_ENABLED=${DB_POSTGRESDB_SSL_ENABLED}
+      # PostgreSQL (Local)
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${LOCAL_DB_NAME:-n8n}
+      - DB_POSTGRESDB_USER=${LOCAL_DB_USER:-n8n}
+      - DB_POSTGRESDB_PASSWORD=${LOCAL_DB_PASSWORD:-n8n_password}
+      - DB_POSTGRESDB_SSL_ENABLED=false
     volumes:
       - n8n_data:/home/node/.n8n
       - ./local-files:/files
 
 volumes:
   n8n_data:
+    external: false
+  postgres_data:
     external: false

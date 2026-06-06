@@ -23,6 +23,8 @@ from github_code_review.models import AgentReview, Issue, PullRequestPayload, Se
 
 logger = logging.getLogger("github_code_review.agents")
 
+_COT_AGENTS: set[str] = {"seguridad", "estructuras"}
+
 
 _AGENT_LABELS = {
     "seguridad": "🔒 Seguridad",
@@ -114,12 +116,13 @@ async def review_file(
         try:
             parser = PydanticOutputParser(pydantic_object=_AgentResponse)
             llm = _get_llm()
+            if agent_name in _COT_AGENTS:
+                sys_msg = system_prompt
+            else:
+                sys_msg = system_prompt + "\n\n" + parser.get_format_instructions()
             raw = await llm.ainvoke(
                 [
-                    (
-                        "system",
-                        system_prompt + "\n\n" + parser.get_format_instructions(),
-                    ),
+                    ("system", sys_msg),
                     ("human", user_message),
                 ]
             )
