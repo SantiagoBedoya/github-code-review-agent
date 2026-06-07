@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 
 from langchain_openai import ChatOpenAI
 
@@ -60,11 +61,14 @@ async def synthesize(all_reviews: dict[str, dict[str, AgentReview]]) -> str:
         lines.append("")
 
     consolidated = "\n".join(lines)
+    t0 = time.monotonic()
     logger.info("  🧠 Generating consolidated report…")
     response = await _get_synth_llm().ainvoke([
         ("system", SYNTHESIZER_SYSTEM),
         ("human", consolidated),
     ])
+    elapsed = time.monotonic() - t0
+    logger.info("  🧠 Synthesizer done  (%.3fs)", elapsed)
 
     if not isinstance(response.content, str):
         return str(response.content)

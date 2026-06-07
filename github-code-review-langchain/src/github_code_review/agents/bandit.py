@@ -65,6 +65,31 @@ class BanditState:
             self.epsilon = global_row.epsilon
             self.count = global_row.count
 
+    async def save_snapshot(
+        self,
+        db: AsyncSession,
+        agent_name: str,
+        reward: float | None,
+        score: float,
+        ran: bool,
+        file_ext: str,
+    ) -> None:
+        from github_code_review.database import BanditSnapshot
+
+        db.add(
+            BanditSnapshot(
+                step=self.count,
+                agent_name=agent_name,
+                weights=list(self.weights[agent_name].w),
+                epsilon=self.epsilon,
+                reward=reward,
+                score=score,
+                ran=ran,
+                file_ext=file_ext,
+            )
+        )
+        await db.flush()
+
     async def save(self, db: AsyncSession) -> None:
         from github_code_review.database import AgentBanditState, BanditGlobalState
 

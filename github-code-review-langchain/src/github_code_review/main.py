@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -71,10 +72,12 @@ async def github_webhook(background_tasks: BackgroundTasks, request: Request) ->
 async def _run_review(pr: PullRequestPayload, bandit_state: BanditState) -> None:
     repo = f"{pr.repo_owner}/{pr.repo_name}"
     logger.info("🚀 Starting review  %s  PR#%s", repo, pr.pr_number)
+    t_start = time.monotonic()
 
     client = GitHubClient()
     raw_files = await client.get_pr_files(pr)
-    logger.info("📂 %d files changed in PR", len(raw_files))
+    t_files = time.monotonic()
+    logger.info("📂 %d files changed in PR  (%.3fs)", len(raw_files), t_files - t_start)
 
     filtered: list[ReviewFile] = []
     for f in raw_files:
@@ -100,7 +103,8 @@ async def _run_review(pr: PullRequestPayload, bandit_state: BanditState) -> None
         logger.info("⏭  No reviewable files  %s  PR#%s", repo, pr.pr_number)
         return
 
-    logger.info("🔍 Reviewing %d file(s) with 5 agents", len(filtered))
+    t_filtered = time.monotonic()
+    logger.info("🔍 Reviewing %d file(s) with 5 agents  (fetch+filter: %.3fs)", len(filtered), t_filtered - t_files)
 
     session = await get_session()
     async with session:
@@ -110,17 +114,26 @@ async def _run_review(pr: PullRequestPayload, bandit_state: BanditState) -> None
             all_results[file.path] = agent_results
         await session.flush()
 
+        t_reviewed = time.monotonic()
         logger.info("🧠 Synthesizing agent reports…")
         markdown = await synthesize(all_results)
+        t_synth = time.monotonic()
         logger.info("💬 Posting comment to PR#%s", pr.pr_number)
         await client.post_comment(pr, markdown)
+        t_posted = time.monotonic()
 
         await bandit_state.save(session)
 
     total_issues = sum(
         len(r.issues) for fr in all_results.values() for r in fr.values()
     )
+    total_time = t_posted - t_start
+    agent_time = t_reviewed - t_filtered
+    synth_time = t_synth - t_reviewed
+    post_time = t_posted - t_synth
     logger.info(
-        "✅ Review complete  %s  PR#%s  —  %d files  %d issues",
+        "✅ Review complete  %s  PR#%s  —  %d files  %d issues  "
+        "(total=%.3fs | agents=%.3fs | synth=%.3fs | post=%.3fs)",
         repo, pr.pr_number, len(filtered), total_issues,
+        total_time, agent_time, synth_time, post_time,
     )

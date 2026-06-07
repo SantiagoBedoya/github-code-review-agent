@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import time
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI
@@ -79,6 +81,7 @@ async def review_file(
     state: BanditState,
     db: AsyncSession,
 ) -> dict[str, AgentReview]:
+    t_file = time.monotonic()
     path = file.path
     ext = "." + path.rsplit(".", 1)[-1]
     patch_lines = file.patch.count("\n")
@@ -88,6 +91,7 @@ async def review_file(
     user_message = f"Archivo:\n{path}\n\nContenido:\n{file.contenido}\n\nDiff del PR:\n{file.patch}"
 
     for agent_name, system_prompt in AGENT_PROMPTS.items():
+        t_agent = time.monotonic()
         run, score = should_run_agent(state, agent_name, features)
         label = _AGENT_LABELS.get(agent_name, agent_name)
 
@@ -109,6 +113,7 @@ async def review_file(
                     reward=None,
                 )
             )
+            await state.save_snapshot(db, agent_name, None, score, False, ext)
             continue
 
         logger.info("  🤖 %s  analyzing %s…", label, path)
@@ -126,7 +131,17 @@ async def review_file(
                     ("human", user_message),
                 ]
             )
-            parsed: _AgentResponse = parser.invoke(raw)
+            content = raw.content
+            if agent_name in _COT_AGENTS:
+                content = re.sub(
+                    r"<razonamiento>.*?</razonamiento>\s*",
+                    "",
+                    content,
+                    flags=re.DOTALL,
+                )
+            parsed: _AgentResponse = parser.invoke(content)
+            elapsed = time.monotonic() - t_agent
+            logger.info("    ⏱  %-22s  done  (%.3fs)", label, elapsed)
             review = AgentReview(
                 path=parsed.path or path,
                 issues=[
@@ -144,6 +159,7 @@ async def review_file(
 
             reward = 1.0 if len(review.issues) > 0 else -0.5
             update_weights(state, agent_name, features, score, reward)
+            await state.save_snapshot(db, agent_name, reward, score, True, ext)
 
             db.add(
                 ReviewHistory(
@@ -165,11 +181,13 @@ async def review_file(
                 logger.info("    ✅ No issues found")
 
         except Exception as exc:
-            logger.warning("    ⚠️  Error: %s", exc)
+            elapsed = time.monotonic() - t_agent
+            logger.warning("    ⚠️  %-22s  Error: %s  (%.3fs)", label, exc, elapsed)
             results[agent_name] = AgentReview(
                 path=path,
                 resumen=f"Error: {exc}",
             )
+            await state.save_snapshot(db, agent_name, None, score, True, ext)
             db.add(
                 ReviewHistory(
                     repo_owner=pr.repo_owner,
@@ -184,4 +202,5 @@ async def review_file(
             )
 
     maybe_decay_epsilon(state)
+    logger.info("  📁 %-22s  reviewed  (%.3fs total)", path, time.monotonic() - t_file)
     return results

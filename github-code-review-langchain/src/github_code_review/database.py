@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Float, Integer, String, Text, func
+from sqlalchemy import Boolean, Float, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -51,6 +51,23 @@ class ReviewHistory(Base):
     agent_name: Mapped[str] = mapped_column(String(50), nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False)
     reward: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now()
+    )
+
+
+class BanditSnapshot(Base):
+    __tablename__ = "bandit_snapshot"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    step: Mapped[int] = mapped_column(Integer, nullable=False)
+    agent_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    weights: Mapped[list[float]] = mapped_column(ARRAY(Float), nullable=False)
+    epsilon: Mapped[float] = mapped_column(Float, nullable=False)
+    reward: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    ran: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    file_ext: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now()
     )
