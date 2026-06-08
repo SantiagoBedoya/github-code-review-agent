@@ -51,10 +51,10 @@ async def github_webhook(background_tasks: BackgroundTasks, request: Request) ->
     pr_number = payload.get("number", 0)
 
     if action not in ("opened", "synchronize"):
-        logger.info("⏭  Ignored action=%s  repo=%s  PR#%s", action, repo, pr_number)
+        logger.info("-> Ignored action=%s  repo=%s  PR#%s", action, repo, pr_number)
         return {"status": "ignored"}
 
-    logger.info("📥 Webhook  action=%s  repo=%s  PR#%s", action, repo, pr_number)
+    logger.info("-> Webhook  action=%s  repo=%s  PR#%s", action, repo, pr_number)
 
     pr = PullRequestPayload(
         repo_owner=payload["repository"]["owner"]["login"],
@@ -71,13 +71,13 @@ async def github_webhook(background_tasks: BackgroundTasks, request: Request) ->
 
 async def _run_review(pr: PullRequestPayload, bandit_state: BanditState) -> None:
     repo = f"{pr.repo_owner}/{pr.repo_name}"
-    logger.info("🚀 Starting review  %s  PR#%s", repo, pr.pr_number)
+    logger.info("-> Starting review  %s  PR#%s", repo, pr.pr_number)
     t_start = time.monotonic()
 
     client = GitHubClient()
     raw_files = await client.get_pr_files(pr)
     t_files = time.monotonic()
-    logger.info("📂 %d files changed in PR  (%.3fs)", len(raw_files), t_files - t_start)
+    logger.info("-> %d files changed in PR  (%.3fs)", len(raw_files), t_files - t_start)
 
     filtered: list[ReviewFile] = []
     for f in raw_files:
@@ -97,14 +97,14 @@ async def _run_review(pr: PullRequestPayload, bandit_state: BanditState) -> None
             content_file.deletions = f.get("deletions", 0)
             content_file.status = f.get("status", "")
             filtered.append(content_file)
-            logger.debug("  ✅  %s  (+%d/-%d)", fname, content_file.additions, content_file.deletions)
+            logger.debug("-> %s  (+%d/-%d)", fname, content_file.additions, content_file.deletions)
 
     if not filtered:
-        logger.info("⏭  No reviewable files  %s  PR#%s", repo, pr.pr_number)
+        logger.info("->  No reviewable files  %s  PR#%s", repo, pr.pr_number)
         return
 
     t_filtered = time.monotonic()
-    logger.info("🔍 Reviewing %d file(s) with 5 agents  (fetch+filter: %.3fs)", len(filtered), t_filtered - t_files)
+    logger.info("-> Reviewing %d file(s) with 5 agents  (fetch+filter: %.3fs)", len(filtered), t_filtered - t_files)
 
     session = await get_session()
     async with session:
@@ -115,10 +115,10 @@ async def _run_review(pr: PullRequestPayload, bandit_state: BanditState) -> None
         await session.flush()
 
         t_reviewed = time.monotonic()
-        logger.info("🧠 Synthesizing agent reports…")
+        logger.info("-> Synthesizing agent reports…")
         markdown = await synthesize(all_results)
         t_synth = time.monotonic()
-        logger.info("💬 Posting comment to PR#%s", pr.pr_number)
+        logger.info("-> Posting comment to PR#%s", pr.pr_number)
         await client.post_comment(pr, markdown)
         t_posted = time.monotonic()
 
@@ -132,7 +132,7 @@ async def _run_review(pr: PullRequestPayload, bandit_state: BanditState) -> None
     synth_time = t_synth - t_reviewed
     post_time = t_posted - t_synth
     logger.info(
-        "✅ Review complete  %s  PR#%s  —  %d files  %d issues  "
+        "-> Review complete  %s  PR#%s  —  %d files  %d issues  "
         "(total=%.3fs | agents=%.3fs | synth=%.3fs | post=%.3fs)",
         repo, pr.pr_number, len(filtered), total_issues,
         total_time, agent_time, synth_time, post_time,

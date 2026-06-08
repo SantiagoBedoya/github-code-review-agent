@@ -62,13 +62,13 @@ async def synthesize(all_reviews: dict[str, dict[str, AgentReview]]) -> str:
 
     consolidated = "\n".join(lines)
     t0 = time.monotonic()
-    logger.info("  🧠 Generating consolidated report…")
+    logger.info("-> Generating consolidated report…")
     response = await _get_synth_llm().ainvoke([
         ("system", SYNTHESIZER_SYSTEM),
         ("human", consolidated),
     ])
     elapsed = time.monotonic() - t0
-    logger.info("  🧠 Synthesizer done  (%.3fs)", elapsed)
+    logger.info("-> Synthesizer done  (%.3fs)", elapsed)
 
     if not isinstance(response.content, str):
         return str(response.content)

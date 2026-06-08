@@ -96,7 +96,7 @@ async def review_file(
         label = _AGENT_LABELS.get(agent_name, agent_name)
 
         if not run:
-            logger.debug("  ⏭  %-22s  score=%.2f", label, score)
+            logger.debug("-> %-22s  score=%.2f", label, score)
             results[agent_name] = AgentReview(
                 path=path,
                 resumen=f"__SKIPPED__ (score: {score:.2f})",
@@ -116,7 +116,7 @@ async def review_file(
             await state.save_snapshot(db, agent_name, None, score, False, ext)
             continue
 
-        logger.info("  🤖 %s  analyzing %s…", label, path)
+        logger.info("-> %s  analyzing %s…", label, path)
 
         try:
             parser = PydanticOutputParser(pydantic_object=_AgentResponse)
@@ -141,7 +141,7 @@ async def review_file(
                 )
             parsed: _AgentResponse = parser.invoke(content)
             elapsed = time.monotonic() - t_agent
-            logger.info("    ⏱  %-22s  done  (%.3fs)", label, elapsed)
+            logger.info("-> %-22s  done  (%.3fs)", label, elapsed)
             review = AgentReview(
                 path=parsed.path or path,
                 issues=[
@@ -176,9 +176,9 @@ async def review_file(
 
             n = len(review.issues)
             if n:
-                logger.info("    → %d issue(s) found", n)
+                logger.info("-> %d issue(s) found", n)
             else:
-                logger.info("    ✅ No issues found")
+                logger.info("-> No issues found")
 
         except Exception as exc:
             elapsed = time.monotonic() - t_agent
@@ -202,5 +202,5 @@ async def review_file(
             )
 
     maybe_decay_epsilon(state)
-    logger.info("  📁 %-22s  reviewed  (%.3fs total)", path, time.monotonic() - t_file)
+    logger.info("-> %-22s  reviewed  (%.3fs total)", path, time.monotonic() - t_file)
     return results
